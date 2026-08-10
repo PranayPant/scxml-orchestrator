@@ -1,0 +1,111 @@
+{
+  "scxml": {
+    "id": "media_player",
+    "initial": "player",
+    "version": "1.0",
+    "states": [
+      {
+        "id": "player",
+        "type": "compound",
+        "initial": "off",
+        "states": [
+          {
+            "id": "off",
+            "type": "atomic",
+            "transitions": [
+              {
+                "id": "power_on",
+                "event": "power",
+                "target": "both.audio both.video",
+                "executable": []
+              }
+            ],
+            "metadata": []
+          },
+          {
+            "id": "both",
+            "type": "parallel",
+            "states": [
+              {
+                "id": "audio",
+                "type": "compound",
+                "initial": "audio_idle",
+                "states": [
+                  {
+                    "id": "audio_idle",
+                    "type": "atomic",
+                    "transitions": [
+                      {
+                        "id": "audio_play",
+                        "event": "play",
+                        "target": "audio_playing",
+                        "executable": []
+                      }
+                    ],
+                    "metadata": []
+                  },
+                  {
+                    "id": "audio_playing",
+                    "type": "atomic",
+                    "transitions": [
+                      {
+                        "id": "audio_pause",
+                        "event": "pause",
+                        "target": "audio_idle",
+                        "executable": []
+                      }
+                    ],
+                    "metadata": []
+                  }
+                ],
+                "parallels": [],
+                "finals": []
+              },
+              {
+                "id": "video",
+                "type": "compound",
+                "initial": "video_idle",
+                "states": [
+                  {
+                    "id": "video_idle",
+                    "type": "atomic",
+                    "transitions": [
+                      {
+                        "id": "video_play",
+                        "event": "play",
+                        "target": "video_playing",
+                        "executable": []
+                      }
+                    ],
+                    "metadata": []
+                  },
+                  {
+                    "id": "video_playing",
+                    "type": "atomic",
+                    "transitions": [
+                      {
+                        "id": "video_pause",
+                        "event": "pause",
+                        "target": "video_idle",
+                        "executable": []
+                      }
+                    ],
+                    "metadata": []
+                  }
+                ],
+                "parallels": [],
+                "finals": []
+              }
+            ],
+            "parallels": [],
+            "finals": []
+          }
+        ],
+        "parallels": [],
+        "finals": []
+      }
+    ],
+    "parallels": [],
+    "finals": []
+  }
+}

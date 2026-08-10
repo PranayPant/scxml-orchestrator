@@ -1,0 +1,53 @@
+{
+  "scxml": {
+    "id": "traffic_light",
+    "initial": "red",
+    "version": "1.0",
+    "states": [
+      {
+        "id": "red",
+        "type": "atomic",
+        "onentry": [{ "kind": "assign", "location": "data.color", "expr": "\"red\"" }],
+        "transitions": [
+          {
+            "id": "red_to_green",
+            "event": "next",
+            "target": "green",
+            "executable": [{ "kind": "raise", "event": "tick" }]
+          }
+        ],
+        "metadata": []
+      },
+      {
+        "id": "green",
+        "type": "atomic",
+        "onentry": [{ "kind": "assign", "location": "data.color", "expr": "\"green\"" }],
+        "transitions": [
+          {
+            "id": "green_to_yellow",
+            "event": "next",
+            "target": "yellow",
+            "executable": []
+          }
+        ],
+        "metadata": []
+      },
+      {
+        "id": "yellow",
+        "type": "atomic",
+        "onentry": [{ "kind": "assign", "location": "data.color", "expr": "\"yellow\"" }],
+        "transitions": [
+          {
+            "id": "yellow_to_red",
+            "event": "next",
+            "target": "red",
+            "executable": []
+          }
+        ],
+        "metadata": []
+      }
+    ],
+    "parallels": [],
+    "finals": []
+  }
+}

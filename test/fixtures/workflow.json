@@ -1,0 +1,104 @@
+{
+  "scxml": {
+    "id": "workflow",
+    "initial": "idle",
+    "version": "1.0",
+    "datamodelChildren": [
+      { "id": "amount", "expr": "0" }
+    ],
+    "states": [
+      {
+        "id": "idle",
+        "type": "atomic",
+        "transitions": [
+          {
+            "id": "idle_start",
+            "event": "start",
+            "target": "active.hist",
+            "executable": []
+          }
+        ],
+        "metadata": []
+      },
+      {
+        "id": "active",
+        "type": "compound",
+        "initial": "a1",
+        "onentry": [{ "kind": "log", "label": "active" }],
+        "transitions": [
+          {
+            "id": "active_reset",
+            "event": "reset",
+            "target": "active.hist",
+            "executable": []
+          },
+          {
+            "id": "active_done",
+            "event": "finish",
+            "target": "done",
+            "executable": []
+          }
+        ],
+        "states": [
+          {
+            "id": "a1",
+            "type": "atomic",
+            "onentry": [{ "kind": "assign", "location": "data.current", "expr": "\"a1\"" }],
+            "transitions": [
+              {
+                "id": "a1_to_a2",
+                "event": "step",
+                "target": "a2",
+                "executable": []
+              }
+            ],
+            "metadata": []
+          },
+          {
+            "id": "a2",
+            "type": "atomic",
+            "onentry": [{ "kind": "assign", "location": "data.current", "expr": "\"a2\"" }],
+            "transitions": [
+              {
+                "id": "a2_guard",
+                "event": "step",
+                "cond": "data.amount > 10",
+                "target": "a3",
+                "executable": []
+              },
+              {
+                "id": "a2_noguard",
+                "event": "step",
+                "target": "a1",
+                "executable": []
+              }
+            ],
+            "metadata": []
+          },
+          {
+            "id": "a3",
+            "type": "atomic",
+            "onentry": [{ "kind": "assign", "location": "data.current", "expr": "\"a3\"" }],
+            "metadata": []
+          }
+        ],
+        "history": [
+          {
+            "id": "hist",
+            "type": "shallow"
+          }
+        ],
+        "parallels": [],
+        "finals": []
+      },
+      {
+        "id": "done",
+        "type": "final",
+        "onentry": [{ "kind": "log", "label": "done" }],
+        "metadata": []
+      }
+    ],
+    "parallels": [],
+    "finals": []
+  }
+}

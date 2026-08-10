@@ -1,0 +1,17 @@
+# Lefthook configuration — pre-commit quality pipeline.
+# Docs: https://github.com/evilmartians/lefthook
+#
+# Run `lefthook install` after editing this file to (re)write the git hooks.
+
+pre-commit:
+  parallel: true
+  commands:
+    styler-and-format:
+      glob: "*.{ex,exs}"
+      run: mix format --check-formatted
+    credo-linter:
+      glob: "*.{ex,exs}"
+      run: mix credo --strict
+    test-suite:
+      glob: "*.{ex,exs}"
+      run: mix test --stale

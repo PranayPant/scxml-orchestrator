@@ -22,3 +22,7 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 scxml_orchestrator-*.tar
 
+# Ignore the escript executable (built via "mix escript.build").
+# Anchored to the repo root so it doesn't also ignore lib/scxml_orchestrator/.
+/scxml_orchestrator
+

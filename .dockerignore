@@ -1,0 +1,26 @@
+# Build artifacts
+_build/
+deps/
+cover/
+doc/
+tmp/
+
+# Crash dumps
+erl_crash.dump
+
+# Archive/package artifacts
+*.ez
+scxml_orchestrator-*.tar
+
+# Escript executable
+scxml_orchestrator
+
+# VCS / editor
+.git/
+.gitignore
+.gitattributes
+
+# Misc
+.idea/
+.vscode/
+*.swp

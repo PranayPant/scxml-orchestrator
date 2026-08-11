@@ -124,6 +124,66 @@ The suite covers deserialization, the event matcher, the LCA compiler, the
 expression evaluator, and full macrostep integrations (parallel regions,
 history, guards, eventless settling) using fixtures in `test/fixtures/`.
 
+## CLI sandbox (escript)
+
+A small console entrypoint — `ScxmlOrchestrator.Main` — packages the engine
+into a single executable (`escript`) so you can poke at statecharts from the
+shell without writing any Elixir. It is intentionally a **playground**, not a
+production interface; production consumption happens through the library API.
+
+Build it (requires a local Elixir/Mix toolchain):
+
+```sh
+mix escript.build
+```
+
+Run it — the resulting binary needs **only Erlang** at runtime:
+
+```sh
+./scxml_orchestrator --file test/fixtures/traffic_light.json --event next
+# > event: next
+#   active_configuration: ["green"]
+#   datamodel: %{"_event" => ..., "data" => %{"color" => "green"}}
+#   done? false
+```
+
+Options:
+
+| Flag            | Description                                                    |
+| --------------- | -------------------------------------------------------------- |
+| `--file <path>` | Path to the SCXML AST JSON document (required).                |
+| `--event <n>`   | Dispatch an event (repeat for multiple, in order).             |
+| `--datamodel`   | Initial datamodel as a JSON object, e.g. `'{"speed": 3}'`.     |
+| `--instance-id` | Instance id to register under (defaults to the graph id).      |
+| `--help`        | Show usage.                                                    |
+
+Exit codes: `0` success, `2` bad usage, `3` could not load/run the document,
+`4` event dispatch failed. On Windows, invoke it via the escript runner, e.g.
+`escript .\scxml_orchestrator --file ...`.
+
+## Docker (deps-free testing)
+
+The included `Dockerfile` lets you run the full build/test/lint toolchain with
+**zero local Elixir/Mix/deps installed** — it is not a distribution vehicle
+for the library or the CLI. Build and run:
+
+```sh
+docker build -t scxml-orchestrator .
+docker run --rm scxml-orchestrator test       # mix test
+docker run --rm scxml-orchestrator credo      # mix credo --strict
+docker run --rm scxml-orchestrator format     # mix format --check-formatted
+docker run --rm scxml-orchestrator compile    # mix compile --warnings-as-errors
+docker run --rm scxml-orchestrator shell      # iex -S mix
+docker run --rm scxml-orchestrator escript    # mix escript.build
+```
+
+> **Windows note:** the container runs Linux. Line endings are normalized to
+> LF via the repo's `.gitattributes`, so a checkout on Windows (or Linux)
+> yields LF files that `bin/run`, `mix format`, and Credo expect. If you
+> bind-mount the repo for interactive work, avoid copying `deps/` / `_build/`
+> from a Windows host into the mount, as those carry platform-specific
+> artifacts.
+
 ## Scope / exclusions
 
 Out of scope for this project: the visual editor, SCXML parsing/serialization

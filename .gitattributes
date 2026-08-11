@@ -1,0 +1,24 @@
+# Normalize all text files to LF in the repository and on checkout.
+# This keeps `mix format`, Credo's line-ending consistency check, and the
+# container tools (mix, bash) consistent across platforms (incl. Windows).
+* text=auto eol=lf
+
+# Source / config
+*.ex    text eol=lf
+*.exs   text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# Shell scripts must stay LF to be runnable in Linux containers.
+*.sh    text eol=lf
+
+# Binary formats (never normalize).
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.gz    binary

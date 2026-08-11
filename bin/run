@@ -1,0 +1,55 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# scxml_orchestrator container entrypoint.
+#
+# Runs a Mix task selected by the first positional argument (defaults to
+# "test"). The image exists so contributors can run the build/test/lint
+# toolchain with zero local Elixir/Mix/deps installed.
+#
+#   test            mix test
+#   credo           mix credo --strict
+#   format          mix format --check
+#   compile         mix compile --warnings-as-errors
+#   shell           iex -S mix
+#   escript         mix escript.build
+# ---------------------------------------------------------------------------
+set -e
+
+TASK="${1:-test}"
+
+case "$TASK" in
+  test)
+    shift || true
+    exec mix test "$@"
+    ;;
+  credo)
+    shift || true
+    exec mix credo --strict "$@"
+    ;;
+  format)
+    shift || true
+    exec mix format --check-formatted "$@"
+    ;;
+  compile)
+    shift || true
+    exec mix compile --warnings-as-errors "$@"
+    ;;
+  escript)
+    shift || true
+    exec mix escript.build "$@"
+    ;;
+  shell)
+    shift || true
+    exec iex -S mix "$@"
+    ;;
+  "")
+    echo "error: no task given" >&2
+    echo "usage: run [test|credo|format|compile|shell|escript] [args...]" >&2
+    exit 2
+    ;;
+  *)
+    echo "error: unknown task '${TASK}'" >&2
+    echo "usage: run [test|credo|format|compile|shell|escript] [args...]" >&2
+    exit 2
+    ;;
+esac

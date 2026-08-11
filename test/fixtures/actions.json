@@ -1,0 +1,127 @@
+{
+  "scxml": {
+    "id": "actions",
+    "initial": "run",
+    "version": "1.0",
+    "states": [
+      {
+        "id": "run",
+        "type": "atomic",
+        "onentry": [
+          { "kind": "assign", "location": "data.a", "expr": "\"x\"" },
+          {
+            "kind": "assign",
+            "location": "data[\"bracket\"]",
+            "expr": "\"y\""
+          },
+          { "kind": "assign", "location": "data.v", "value": 99 },
+          { "kind": "assign", "location": "data.n" },
+          {
+            "kind": "if",
+            "cond": "data.flag == true",
+            "executable": [
+              { "kind": "assign", "location": "data.iffy", "expr": "\"yes\"" }
+            ]
+          },
+          {
+            "kind": "if",
+            "cond": "data.flag == false",
+            "executable": [
+              {
+                "kind": "assign",
+                "location": "data.iffy_not",
+                "expr": "\"wrong\""
+              }
+            ]
+          },
+          {
+            "kind": "elseif",
+            "cond": "data.flag == true",
+            "executable": [
+              { "kind": "assign", "location": "data.elseif", "expr": "\"ran\"" }
+            ]
+          },
+          {
+            "kind": "else",
+            "executable": [
+              { "kind": "assign", "location": "data.elsed", "expr": "\"ran\"" }
+            ]
+          },
+          {
+            "kind": "foreach",
+            "array": "data.list",
+            "item": "it",
+            "executable": [
+              { "kind": "assign", "location": "data.last", "expr": "it" }
+            ]
+          },
+          {
+            "kind": "foreach",
+            "array": "data.notalist",
+            "item": "it",
+            "executable": [
+              {
+                "kind": "assign",
+                "location": "data.should_not",
+                "expr": "\"nope\""
+              }
+            ]
+          },
+          {
+            "kind": "foreach",
+            "array": "data.list",
+            "executable": [
+              { "kind": "assign", "location": "data.no_item", "expr": "\"x\"" }
+            ]
+          },
+          { "kind": "send", "event": "internal_ping" },
+          { "kind": "send", "eventexpr": "\"internal_dyn\"" },
+          { "kind": "send", "eventexpr": "@@@" },
+          { "kind": "send" },
+          { "kind": "cancel", "sendid": "s1" },
+          { "kind": "script", "text": "x = 1" },
+          { "kind": "assign", "location": "data.bad", "expr": "@@@" },
+          {
+            "kind": "if",
+            "cond": "data.flag == false",
+            "executable": [
+              { "kind": "assign", "location": "data.if_false", "expr": "\"x\"" }
+            ]
+          },
+          {
+            "kind": "elseif",
+            "cond": "data.flag == false",
+            "executable": [
+              {
+                "kind": "assign",
+                "location": "data.elseif_false",
+                "expr": "\"x\""
+              }
+            ]
+          },
+          { "kind": "log", "label": "ok", "expr": "data.a" },
+          { "kind": "log", "label": "bad", "expr": "@@@" },
+          { "kind": "bogus" }
+        ],
+        "transitions": [
+          {
+            "id": "finish",
+            "event": "finish",
+            "target": "done",
+            "executable": []
+          },
+          {
+            "id": "ghost",
+            "event": "ghost",
+            "target": "missing_state",
+            "executable": []
+          }
+        ],
+        "metadata": []
+      },
+      { "id": "done", "type": "atomic", "metadata": [] }
+    ],
+    "parallels": [],
+    "finals": []
+  }
+}

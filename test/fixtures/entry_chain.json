@@ -1,0 +1,60 @@
+{
+  "scxml": {
+    "id": "entry_chain",
+    "initial": "outer",
+    "version": "1.0",
+    "states": [
+      {
+        "id": "outer",
+        "type": "compound",
+        "initial": "p",
+        "transitions": [
+          { "id": "leave", "event": "leave", "target": "top", "executable": [] }
+        ],
+        "parallels": [
+          {
+            "id": "p",
+            "states": [
+              {
+                "id": "a",
+                "type": "compound",
+                "initial": "a1",
+                "states": [{ "id": "a1", "type": "atomic", "metadata": [] }],
+                "parallels": [],
+                "finals": []
+              },
+              {
+                "id": "b",
+                "type": "compound",
+                "initial": "b1",
+                "states": [{ "id": "b1", "type": "atomic", "metadata": [] }],
+                "parallels": [],
+                "finals": []
+              }
+            ],
+            "parallels": [],
+            "finals": []
+          }
+        ],
+        "states": [],
+        "finals": [],
+        "history": [{ "id": "h", "type": "shallow" }]
+      },
+      {
+        "id": "top",
+        "type": "atomic",
+        "transitions": [
+          {
+            "id": "back",
+            "event": "back",
+            "target": "outer.h",
+            "executable": []
+          }
+        ],
+        "metadata": []
+      }
+    ],
+    "parallels": [],
+    "finals": []
+  }
+}

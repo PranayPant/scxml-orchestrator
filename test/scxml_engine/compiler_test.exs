@@ -89,4 +89,95 @@ defmodule ScxmlEngine.CompilerTest do
       end
     end
   end
+
+  describe "target resolution" do
+    test "resolves dotted paths and leaves unresolvable ones untouched" do
+      doc = %{
+        "scxml" => %{
+          "id" => "targets",
+          "initial" => "a",
+          "states" => [
+            %{
+              "id" => "a",
+              "type" => "compound",
+              "initial" => "a1",
+              "transitions" => [
+                %{"id" => "t1", "event" => "good", "target" => "a.a1", "executable" => []},
+                %{"id" => "t2", "event" => "bad_path", "target" => "a.bogus", "executable" => []},
+                %{"id" => "t3", "event" => "bad_head", "target" => "ghost.x", "executable" => []}
+              ],
+              "states" => [%{"id" => "a1", "metadata" => []}],
+              "parallels" => [],
+              "finals" => []
+            }
+          ],
+          "parallels" => [],
+          "finals" => []
+        }
+      }
+
+      graph = doc |> Document.from_map() |> Compiler.compile()
+      [t1, t2, t3] = graph.states["a"].transitions
+
+      assert t1.targets == ["a1"]
+      assert t2.targets == ["a.bogus"]
+      assert t3.targets == ["ghost.x"]
+    end
+  end
+
+  describe "store/2 and fetch/1 edge cases" do
+    test "generates an id when none is provided or present" do
+      graph = %ScxmlEngine.RuntimeGraph{states: %{}}
+      {:ok, id} = Compiler.store(graph, nil)
+
+      assert is_binary(id)
+      assert String.starts_with?(id, "g-")
+      assert Compiler.fetch(id)
+    end
+
+    test "fetch returns nil for an absent graph id" do
+      assert Compiler.fetch("no_such_graph_xyz") == nil
+    end
+
+    test "compile handles a graph without a parent_map (fallback empty)" do
+      graph = %ScxmlEngine.RuntimeGraph{
+        states: %{"s1" => %ScxmlEngine.RuntimeState{id: "s1", type: :atomic}}
+      }
+
+      compiled = Compiler.compile(graph)
+      assert compiled.parent_map == %{}
+      assert compiled.ancestors_map["s1"] == []
+    end
+  end
+
+  describe "event indexing" do
+    test "star events are treated as patterns, not exact" do
+      doc = %{
+        "scxml" => %{
+          "id" => "star",
+          "initial" => "s",
+          "states" => [
+            %{
+              "id" => "s",
+              "type" => "atomic",
+              "transitions" => [
+                %{"id" => "t", "event" => "*", "target" => "s", "executable" => []}
+              ],
+              "metadata" => []
+            }
+          ],
+          "parallels" => [],
+          "finals" => []
+        }
+      }
+
+      graph = doc |> Document.from_map() |> Compiler.compile()
+      refute Map.has_key?(graph.event_index.exact, "*")
+      assert Enum.any?(graph.event_index.patterns, &(&1.event == "*"))
+    end
+
+    test "graph_prefix/0 returns the persistent_term key prefix" do
+      assert Compiler.graph_prefix() == :scxml_graph
+    end
+  end
 end

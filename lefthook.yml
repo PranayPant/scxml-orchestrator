@@ -15,3 +15,6 @@ pre-commit:
     test-suite:
       glob: "*.{ex,exs}"
       run: mix test --stale
+    coverage:
+      glob: "*.{ex,exs}"
+      run: mix test --cover

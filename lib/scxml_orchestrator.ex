@@ -14,6 +14,8 @@ defmodule ScxmlOrchestrator do
   defdelegate store(graph, graph_id \\ nil), to: ScxmlEngine
   defdelegate run(json, opts \\ []), to: ScxmlEngine
   defdelegate start_instance(opts), to: ScxmlEngine
+  defdelegate send_event(pid, event_name, payload \\ %{}), to: ScxmlEngine
+  defdelegate send_event_to(instance_id, event_name, payload \\ %{}), to: ScxmlEngine
   defdelegate instance_pid(instance_id), to: ScxmlEngine
   defdelegate active_configuration(pid), to: ScxmlEngine
   defdelegate datamodel(pid), to: ScxmlEngine

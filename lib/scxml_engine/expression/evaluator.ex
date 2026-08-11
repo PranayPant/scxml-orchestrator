@@ -74,47 +74,34 @@ defmodule ScxmlEngine.Expression.Evaluator do
   end
 
   defp look_up(container, path) do
-    case String.split(path, ".") do
-      [] ->
-        container
+    [key | rest] = String.split(path, ".")
 
-      [key | rest] ->
-        val = index_into(container, key)
+    val = index_into(container, key)
 
-        case {val, rest} do
-          {@builtin_bound_value, _} ->
-            @builtin_bound_value
+    case {val, rest} do
+      {@builtin_bound_value, _} ->
+        @builtin_bound_value
 
-          {val, []} ->
-            val
+      {val, []} ->
+        val
 
-          {val, _rest} ->
-            if(is_map(val), do: look_up(val, Enum.join(rest, ".")), else: @builtin_bound_value)
-        end
+      {val, _rest} ->
+        if(is_map(val), do: look_up(val, Enum.join(rest, ".")), else: @builtin_bound_value)
     end
   end
 
   defp index_into(container, key) when is_map(container) do
-    if is_binary(key) and Map.has_key?(container, key) do
-      Map.get(container, key)
-    else
-      lookup_string_key(container, key)
+    cond do
+      is_binary(key) and Map.has_key?(container, key) -> Map.get(container, key)
+      # JSON maps use string keys, but a hand-built datamodel may use atoms.
+      is_binary(key) -> Map.get(container, String.to_atom(key), @builtin_bound_value)
+      true -> @builtin_bound_value
     end
   end
 
   defp index_into(list, idx) when is_list(list) and is_integer(idx), do: Enum.at(list, idx, @builtin_bound_value)
 
   defp index_into(_other, _key), do: @builtin_bound_value
-
-  # Maps may hold atom or string keys (JSON maps use string keys); check both.
-  defp lookup_string_key(container, key) do
-    cond do
-      is_binary(key) and Map.has_key?(container, key) -> Map.get(container, key)
-      is_binary(key) -> Map.get(container, String.to_atom(key), @builtin_bound_value)
-      is_atom(key) and Map.has_key?(container, key) -> Map.get(container, key)
-      true -> @builtin_bound_value
-    end
-  end
 
   # -- operators ------------------------------------------------------------
 

@@ -3,9 +3,7 @@
     "id": "workflow",
     "initial": "idle",
     "version": "1.0",
-    "datamodelChildren": [
-      { "id": "amount", "expr": "0" }
-    ],
+    "datamodelChildren": [{ "id": "amount", "expr": "0" }],
     "states": [
       {
         "id": "idle",
@@ -43,7 +41,9 @@
           {
             "id": "a1",
             "type": "atomic",
-            "onentry": [{ "kind": "assign", "location": "data.current", "expr": "\"a1\"" }],
+            "onentry": [
+              { "kind": "assign", "location": "data.current", "expr": "\"a1\"" }
+            ],
             "transitions": [
               {
                 "id": "a1_to_a2",
@@ -57,7 +57,9 @@
           {
             "id": "a2",
             "type": "atomic",
-            "onentry": [{ "kind": "assign", "location": "data.current", "expr": "\"a2\"" }],
+            "onentry": [
+              { "kind": "assign", "location": "data.current", "expr": "\"a2\"" }
+            ],
             "transitions": [
               {
                 "id": "a2_guard",
@@ -78,7 +80,9 @@
           {
             "id": "a3",
             "type": "atomic",
-            "onentry": [{ "kind": "assign", "location": "data.current", "expr": "\"a3\"" }],
+            "onentry": [
+              { "kind": "assign", "location": "data.current", "expr": "\"a3\"" }
+            ],
             "metadata": []
           }
         ],

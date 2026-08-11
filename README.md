@@ -49,15 +49,15 @@ shaped like the TypeScript `SCXMLDocument` produced by `scxml-parser`:
 
 Notable conventions the compiler handles:
 
-* **Nested arrays** — states live in `states[]` / `parallels[]` / `finals[]` /
+- **Nested arrays** — states live in `states[]` / `parallels[]` / `finals[]` /
   `history[]` arrays (per node); the compiler folds them into flat maps keyed
   by id during compilation.
-* **Lowercase action keys** — `onentry` / `onexit`, and `transition.executable`
+- **Lowercase action keys** — `onentry` / `onexit`, and `transition.executable`
   (a `kind`-discriminated list, e.g. `raise`, `assign`, `log`, `if`).
-* **Space-separated, possibly dotted targets** — `target: "both.audio both.video"`
+- **Space-separated, possibly dotted targets** — `target: "both.audio both.video"`
   resolves dotted hierarchical paths (`both.audio` → `audio`) through the
   parent map; multiple targets enter several parallel regions concurrently.
-* **Layout** lives opaquely in `metadata` blocks and is ignored by the runtime.
+- **Layout** lives opaquely in `metadata` blocks and is ignored by the runtime.
 
 ## Usage
 
@@ -83,34 +83,34 @@ ScxmlEngine.instances()               # [{instance_id, pid}, ...]
 
 ### Lower-level API
 
-| Function | Purpose |
-|---|---|
-| `ScxmlEngine.load/1` | Parse a parser-AST JSON string into a raw `RuntimeGraph`. |
-| `ScxmlEngine.store/2` | Compile + store the graph in `:persistent_term`; returns `graph_id`. |
-| `ScxmlEngine.start_instance/1` | Spawn an instance for an already-stored graph. |
-| `ScxmlEngine.run/2` | `load` + `store` + `start_instance` in one step. |
+| Function                       | Purpose                                                              |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `ScxmlEngine.load/1`           | Parse a parser-AST JSON string into a raw `RuntimeGraph`.            |
+| `ScxmlEngine.store/2`          | Compile + store the graph in `:persistent_term`; returns `graph_id`. |
+| `ScxmlEngine.start_instance/1` | Spawn an instance for an already-stored graph.                       |
+| `ScxmlEngine.run/2`            | `load` + `store` + `start_instance` in one step.                     |
 
 ## Architecture
 
 The project follows `ARCHITECTURE.md`:
 
-* **`ScxmlEngine.Compiler`** — pure-functional transform (no process side
+- **`ScxmlEngine.Compiler`** — pure-functional transform (no process side
   effects). Builds `parent_map`, `ancestors_map`, and an `event_index`, and
   pre-computes each transition's LCA `exit_set` / `entry_set` (UI-AST-RUNTIME
   §4). Compiled graphs are stored in `:persistent_term` keyed
   `{:scxml_graph, graph_id}` so millions of instances read them zero-copy.
-* **`ScxmlEngine.EventMatcher`** — wildcard (`*`), dot-prefix (`user.*`),
+- **`ScxmlEngine.EventMatcher`** — wildcard (`*`), dot-prefix (`user.*`),
   tokenized (`"A B"`), and exact event matching.
-* **`ScxmlEngine.Expression`** — a **sandboxed** guard/expression evaluator
+- **`ScxmlEngine.Expression`** — a **sandboxed** guard/expression evaluator
   over the datamodel (arithmetic, comparison, boolean, map path access).
   `Code.eval_string/2` is deliberately avoided (RCE risk from untrusted SCXML).
-* **`ScxmlEngine.Instance`** — a `GenServer` per running statechart. The
+- **`ScxmlEngine.Instance`** — a `GenServer` per running statechart. The
   mailbox is the external queue; process state holds the active configuration
   (`MapSet`), the datamodel, and the internal queue. Implements the
   macrostep/microstep interpreter: exit bottom-up → transition actions →
   enter top-down (with compound/parallel default-entry expansion) →
   settle eventless transitions.
-* **`ScxmlEngine.Registry` + `ScxmlEngine.Instances`** — an OTP
+- **`ScxmlEngine.Registry` + `ScxmlEngine.Instances`** — an OTP
   `Registry` mapping `instance_id` → pid, plus a `DynamicSupervisor` that
   spawns/isolates instances on demand.
 
@@ -130,4 +130,3 @@ Out of scope for this project: the visual editor, SCXML parsing/serialization
 (handled by `scxml-parser`), HTTP/WebSocket transports, and distributed BEAM
 (`Horde`). The public API is library-first; a transport layer can be layered
 on top of `ScxmlEngine` later.
-

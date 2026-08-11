@@ -1,0 +1,60 @@
+{
+  "scxml": {
+    "id": "deep_hist",
+    "initial": "outer",
+    "version": "1.0",
+    "states": [
+      {
+        "id": "outer",
+        "type": "compound",
+        "initial": "in",
+        "transitions": [
+          { "id": "leave", "event": "leave", "target": "top", "executable": [] }
+        ],
+        "states": [
+          {
+            "id": "in",
+            "type": "compound",
+            "initial": "in_a",
+            "states": [
+              {
+                "id": "in_a",
+                "type": "atomic",
+                "transitions": [
+                  {
+                    "id": "to_b",
+                    "event": "next",
+                    "target": "in_b",
+                    "executable": []
+                  }
+                ],
+                "metadata": []
+              },
+              { "id": "in_b", "type": "atomic", "metadata": [] }
+            ],
+            "parallels": [],
+            "finals": [],
+            "history": [{ "id": "hist", "type": "deep" }]
+          }
+        ],
+        "parallels": [],
+        "finals": []
+      },
+      {
+        "id": "top",
+        "type": "atomic",
+        "transitions": [
+          {
+            "id": "restore",
+            "event": "restore",
+            "target": "in.hist",
+            "executable": []
+          }
+        ],
+        "metadata": []
+      }
+    ],
+    "parallels": [],
+    "finals": []
+  }
+}

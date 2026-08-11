@@ -1,0 +1,67 @@
+{
+  "scxml": {
+    "id": "eventless",
+    "initial": "start",
+    "version": "1.0",
+    "states": [
+      {
+        "id": "start",
+        "type": "atomic",
+        "onexit": [
+          { "kind": "assign", "location": "data.exited", "expr": "\"yes\"" }
+        ],
+        "transitions": [
+          { "id": "go", "event": "go", "target": "settling", "executable": [] }
+        ],
+        "metadata": []
+      },
+      {
+        "id": "settling",
+        "type": "compound",
+        "initial": "pending",
+        "onentry": [
+          { "kind": "assign", "location": "data.entered", "expr": "\"yes\"" }
+        ],
+        "states": [
+          {
+            "id": "pending",
+            "type": "atomic",
+            "transitions": [
+              {
+                "id": "settle",
+                "target": "done",
+                "executable": [
+                  { "kind": "log", "label": "settle", "expr": "\"logging\"" }
+                ]
+              }
+            ],
+            "metadata": []
+          }
+        ],
+        "parallels": [],
+        "finals": []
+      },
+      {
+        "id": "done",
+        "type": "atomic",
+        "transitions": [
+          {
+            "id": "reset",
+            "event": "reset",
+            "target": "start",
+            "executable": []
+          },
+          {
+            "id": "guarded_nil",
+            "cond": "false",
+            "target": "start",
+            "executable": []
+          }
+        ],
+        "metadata": []
+      }
+    ],
+    "parallels": [],
+    "finals": []
+  }
+}

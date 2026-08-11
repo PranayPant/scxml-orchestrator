@@ -8,6 +8,7 @@ defmodule ScxmlOrchestrator.MixProject do
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
+      test_coverage: [summary: [threshold: 100]],
       deps: deps()
     ]
   end

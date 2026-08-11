@@ -73,4 +73,91 @@ defmodule ScxmlEngine.DocumentTest do
       assert {:error, _} = Document.load("{ not json")
     end
   end
+
+  describe "type resolution edge cases" do
+    test "final via donedata, explicit compound type, and children-derived compound" do
+      doc = %{
+        "scxml" => %{
+          "id" => "types",
+          "initial" => "a",
+          "states" => [
+            %{"id" => "a", "donedata" => %{"content" => []}, "metadata" => []},
+            %{"id" => "b", "type" => "compound", "metadata" => []},
+            %{"id" => "c", "metadata" => [], "states" => [%{"id" => "c1", "metadata" => []}]},
+            %{"id" => "d", "metadata" => []}
+          ],
+          "parallels" => [],
+          "finals" => []
+        }
+      }
+
+      graph = Document.from_map(doc)
+
+      assert graph.states["a"].type == :final
+      assert graph.states["b"].type == :compound
+      assert graph.states["c"].type == :compound
+      assert graph.states["c1"].type == :atomic
+      assert graph.states["d"].type == :atomic
+    end
+
+    test "parallel/final array hints and deep history" do
+      doc = %{
+        "scxml" => %{
+          "id" => "kinds",
+          "initial" => "p",
+          "states" => [],
+          "parallels" => [
+            %{"id" => "p", "states" => [], "parallels" => [], "finals" => [], "metadata" => []}
+          ],
+          "finals" => [%{"id" => "done", "metadata" => []}],
+          "history" => [%{"id" => "h", "type" => "deep"}]
+        }
+      }
+
+      graph = Document.from_map(doc)
+
+      assert graph.states["p"].type == :parallel
+      assert graph.states["done"].type == :final
+      assert graph.states["h"].type == :history
+      assert graph.states["h"].history_type == :deep
+    end
+
+    test "history default transition targets are split" do
+      doc = %{
+        "scxml" => %{
+          "id" => "hist",
+          "initial" => "s",
+          "states" => [%{"id" => "s", "metadata" => []}],
+          "parallels" => [],
+          "finals" => [],
+          "history" => [%{"id" => "h", "transition" => %{"target" => "s s2"}}]
+        }
+      }
+
+      graph = Document.from_map(doc)
+      assert graph.states["h"].history_targets == ["s", "s2"]
+    end
+
+    test "raises on a non-scxml document" do
+      assert_raise ArgumentError, fn -> Document.from_map(%{"foo" => "bar"}) end
+    end
+
+    test "a state node carrying a transition map is treated as history" do
+      doc = %{
+        "scxml" => %{
+          "id" => "h2",
+          "initial" => "s",
+          "states" => [
+            %{"id" => "s", "metadata" => []},
+            %{"id" => "h2", "transition" => %{"target" => "s"}}
+          ],
+          "parallels" => [],
+          "finals" => []
+        }
+      }
+
+      graph = Document.from_map(doc)
+      assert graph.states["h2"].type == :history
+    end
+  end
 end

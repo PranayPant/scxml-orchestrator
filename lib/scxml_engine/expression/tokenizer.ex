@@ -33,7 +33,8 @@ defmodule ScxmlEngine.Expression.Tokenizer do
     "*",
     "/",
     "%",
-    "="
+    "=",
+    "!"
   ]
 
   @spec tokenize(String.t()) :: {:ok, [token()]} | {:error, term()}

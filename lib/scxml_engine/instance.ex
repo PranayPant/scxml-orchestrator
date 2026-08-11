@@ -245,49 +245,81 @@ defmodule ScxmlEngine.Instance do
   #   3. Enter states in `entry_set` top-down (run on_entry), adding to active config.
   #      Compound/parallel states are expanded recursively into their initial child.
   defp execute_transition(graph, state, transition) do
+    exit_set = compute_exit_set(graph, state, transition)
+
     state
-    |> execute_exits(graph, transition.exit_set)
+    |> record_exit_histories(graph, exit_set)
+    |> execute_exits(graph, exit_set)
     |> execute_action_list(transition.actions)
     |> execute_entries(graph, transition.entry_set)
   end
 
+  # The states to exit for a transition are the currently-active states that
+  # are proper descendants of the transition's LCA and are not on the entry
+  # path. This is computed at runtime because it depends on the active
+  # configuration: e.g. a transition on a compound state targeting one of its
+  # own children must still exit the compound's *other* active descendants.
+  # Internal transitions (no target) exit nothing.
+  defp compute_exit_set(graph, state, transition) do
+    if Enum.empty?(transition.targets) do
+      []
+    else
+      lca = transition.lca_id
+      entry_set = MapSet.new(transition.entry_set)
+
+      state.active_configuration
+      |> Enum.filter(fn sid ->
+        proper_descendant_of?(sid, lca, graph) and not MapSet.member?(entry_set, sid)
+      end)
+      |> Enum.sort_by(&(-length(Map.get(graph.ancestors_map, &1, []))))
+    end
+  end
+
+  defp proper_descendant_of?(_sid, nil, _graph), do: true
+
+  defp proper_descendant_of?(sid, lca, graph) do
+    sid != lca and Enum.member?(Map.get(graph.ancestors_map, sid, []), lca)
+  end
+
+  # Record the last-active direct children of every compound/parallel region
+  # being exited, so their `history` pseudo-states can restore them. This runs
+  # before any deactivation so the recorded children are still intact.
+  defp record_exit_histories(state, graph, exit_set) do
+    Enum.reduce(exit_set, state, fn sid, acc ->
+      case Map.get(graph.states, sid) do
+        %{type: type} when type in [:compound, :parallel] ->
+          active_children =
+            Enum.filter(direct_children(sid, graph), &MapSet.member?(state.active_configuration, &1))
+
+          record_history(acc, sid, active_children)
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
   defp execute_exits(state, _graph, []), do: state
 
+  # Active configuration ids always resolve to graph states (dangling history
+  # defaults are filtered at entry), so fetch directly.
   defp execute_exits(%Instance{} = state, graph, [id | rest]) do
-    if MapSet.member?(state.active_configuration, id) do
-      the_state = Map.get(graph.states, id)
+    the_state = Map.fetch!(graph.states, id)
 
-      state =
-        cond do
-          is_nil(the_state) ->
-            state
+    state =
+      case the_state.type do
+        # A history pseudo-state in the active configuration is deactivated
+        # like any other state (it has no exit actions).
+        :history ->
+          deactivate(state, id)
 
-          the_state.type == :history ->
-            state
+        _ ->
+          state
+          |> execute_action_list(the_state.on_exit)
+          |> deactivate(id)
+      end
 
-          # Record history when leaving a compound/parallel region so that its
-          # `history` pseudo-state can restore where we were.
-          the_state.type in [:compound, :parallel] ->
-            children = direct_children(id, graph)
-
-            active_children =
-              Enum.filter(children, &MapSet.member?(state.active_configuration, &1))
-
-            state
-            |> record_history(id, active_children)
-            |> execute_action_list(the_state.on_exit)
-            |> deactivate(id)
-
-          true ->
-            state
-            |> execute_action_list(the_state.on_exit)
-            |> deactivate(id)
-        end
-
-      execute_exits(state, graph, rest)
-    else
-      execute_exits(state, graph, rest)
-    end
+    execute_exits(state, graph, rest)
   end
 
   defp execute_entries(state, _graph, []), do: state
@@ -320,30 +352,36 @@ defmodule ScxmlEngine.Instance do
   # This gives correct SCXML default-entry semantics on top of the precomputed
   # LCA `entry_set`.
   defp enter_default_children(state, graph, id, remaining) do
-    case Map.get(graph.states, id) do
-      %{type: :compound, initial: child} when is_binary(child) ->
-        enter_if_default(state, graph, child, remaining)
+    # If the remaining entry set explicitly targets a descendant of `id` (e.g.
+    # a history pseudo-state or a specific child), don't enter defaults here —
+    # the more specific entry will select the children.
+    if Enum.any?(remaining, fn r -> descendant_of?(r, id, graph) end) do
+      state
+    else
+      case Map.get(graph.states, id) do
+        %{type: :compound, initial: child} when is_binary(child) ->
+          enter_if_default(state, graph, child, remaining)
 
-      %{type: :parallel} = p ->
-        Enum.reduce(direct_children(p.id, graph), state, fn child, acc ->
-          enter_if_default(acc, graph, child, remaining)
-        end)
+        %{type: :parallel} = p ->
+          Enum.reduce(direct_children(p.id, graph), state, fn child, acc ->
+            enter_if_default(acc, graph, child, remaining)
+          end)
 
-      _ ->
-        state
+        _ ->
+          state
+      end
     end
   end
 
+  defp descendant_of?(r, id, graph) do
+    r != id and Enum.member?(Map.get(graph.ancestors_map, r, []), id)
+  end
+
   defp enter_if_default(state, graph, child, remaining) do
-    if MapSet.member?(remaining, child) or
-         MapSet.member?(state.active_configuration, child) do
-      state
-    else
-      state
-      |> activate(child)
-      |> execute_action_list(graph.states[child].on_entry)
-      |> enter_default_children(graph, child, remaining)
-    end
+    state
+    |> activate(child)
+    |> execute_action_list(graph.states[child].on_entry)
+    |> enter_default_children(graph, child, remaining)
   end
 
   # Entering a history pseudo-state: restore the last active children of its
@@ -381,10 +419,16 @@ defmodule ScxmlEngine.Instance do
           ids
       end
 
+    # Only restore targets that exist in the graph — a dangling default target
+    # is skipped rather than crashing later lookups.
     Enum.reduce(Enum.reverse(targets), state, fn target, acc ->
-      acc
-      |> activate(target)
-      |> execute_entry_chain(graph, target)
+      if Map.has_key?(graph.states, target) do
+        acc
+        |> activate(target)
+        |> execute_entry_chain(graph, target)
+      else
+        acc
+      end
     end)
   end
 
@@ -476,10 +520,7 @@ defmodule ScxmlEngine.Instance do
   # After activating a state, if it's compound/parallel, descend into its
   # initial children (used when entering a specific child from a history).
   defp execute_entry_chain(state, graph, id) do
-    case Map.get(graph.states, id) do
-      nil ->
-        state
-
+    case Map.fetch!(graph.states, id) do
       %{type: :compound, initial: child} when not is_nil(child) ->
         state
         |> activate(child)
@@ -644,7 +685,7 @@ defmodule ScxmlEngine.Instance do
       {_state_id, transition} ->
         state
         |> put_datamodel("_event", %{name: "__eventless__", data: %{}})
-        |> execute_transition(graph, transition)
+        |> then(&execute_transition(graph, &1, transition))
         |> evaluate_eventless_transitions()
     end
   end
@@ -655,7 +696,9 @@ defmodule ScxmlEngine.Instance do
     Enum.reduce_while(active_states, nil, fn state_id, _acc ->
       the_state = Map.fetch!(graph.states, state_id)
 
-      case Enum.find(the_state.transitions, fn t -> is_nil(t.event) end) do
+      case Enum.find(the_state.transitions, fn t ->
+             is_nil(t.event) and Expression.guard_true?(t.cond, state.datamodel)
+           end) do
         nil -> {:cont, nil}
         transition -> {:halt, {state_id, transition}}
       end

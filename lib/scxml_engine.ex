@@ -146,6 +146,17 @@ defmodule ScxmlEngine do
   def execution_status(pid), do: Instance.execution_status(pid)
 
   @doc """
+  Status of each active state in the current configuration.
+
+  Returns a list of `%{id: String.t(), status: state_status(), type: state_type()}`
+  maps where `state_status()` is `:running`, `:completed`, or `:error` and
+  `state_type()` is `:normal`, `:parallel`, or `:final`. Only states in the
+  active configuration are included.
+  """
+  @spec active_states(pid()) :: [ScxmlEngine.Instance.state_info()]
+  def active_states(pid), do: Instance.active_states(pid)
+
+  @doc """
   Enumerate all running instance `{instance_id, pid}` pairs.
   """
   @spec instances() :: [{String.t(), pid()}]

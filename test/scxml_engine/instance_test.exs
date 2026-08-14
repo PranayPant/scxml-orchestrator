@@ -54,15 +54,61 @@ defmodule ScxmlEngine.InstanceTest do
   end
 
   describe "execution_status/1" do
-    test ":idle when instance is created but no events sent yet" do
+    test ":idle when instance is created at initial configuration" do
       pid = start_traffic_light()
-      assert Instance.execution_status(pid) == :running
+      assert Instance.execution_status(pid) == :idle
     end
 
     test ":running after events have been processed" do
       pid = start_traffic_light()
       Instance.send_event(pid, "next")
       assert Instance.execution_status(pid) == :running
+    end
+
+    test ":completed when a final state is reached" do
+      {pid, _graph_id} = start_workflow()
+
+      # idle -> active.hist (defaults to a1)
+      Instance.send_event(pid, "start")
+      # active -> done (final state)
+      Instance.send_event(pid, "finish")
+
+      assert Instance.execution_status(pid) == :completed
+    end
+  end
+
+  describe "active_states/1" do
+    test "returns active states with their statuses" do
+      pid = start_traffic_light()
+      states = Instance.active_states(pid)
+
+      assert length(states) == 1
+      assert Enum.find(states, &(&1.id == "red")) == %{id: "red", status: :running, type: :atomic}
+    end
+
+    test "returns multiple states for parallel configurations" do
+      {pid, _graph_id} = start_workflow()
+
+      Instance.send_event(pid, "start")
+      # After start, should be in active/a2 (compound state with children)
+      states = Instance.active_states(pid)
+
+      assert length(states) >= 1
+      # All non-final states should be :running
+      assert Enum.all?(states, &(&1.status == :running))
+    end
+
+    test "marks final states as :completed" do
+      {pid, _graph_id} = start_workflow()
+
+      Instance.send_event(pid, "start")
+      Instance.send_event(pid, "finish")
+
+      states = Instance.active_states(pid)
+      done_state = Enum.find(states, &(&1.id == "done"))
+
+      assert done_state.status == :completed
+      assert done_state.type == :final
     end
   end
 

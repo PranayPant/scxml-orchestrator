@@ -44,6 +44,12 @@ defmodule ScxmlEngine.Instance do
     :graph_id,
     active_configuration: MapSet.new(),
     datamodel: %{},
+    # Explicitly tracked instance-level execution status.
+    # Updated through lifecycle transitions rather than derived from config.
+    execution_status: :idle,
+    # Maps each active state id to its per-state status (`:running | :completed | :error`).
+    # Updated on each activate/deactivate rather than derived from the state type.
+    state_statuses: %{},
     internal_queue: :queue.new(),
     # Maps a compound/parallel region's parent id to its last-active direct
     # child ids — used to restore `history` pseudo-states on re-entry.
@@ -110,24 +116,41 @@ defmodule ScxmlEngine.Instance do
   @doc """
   Return the execution status of an instance.
 
-  Possible values:
+  Status is tracked **explicitly** in the process state rather than derived
+  from the active configuration. It is updated at each lifecycle point:
 
-  * `:idle` — Instance created but no events sent yet; at initial configuration.
-  * `:running` — Events have been processed; transitions may be active.
-  * `:completed` — All final states reached; `done?` is true.
-  * `:error` — Active configuration is empty and `done?` is false (unhandled error or raise terminated the instance).
+  * `:idle` — Instance created; at initial configuration, no events processed.
+  * `:running` — Events are being processed; transitions are active.
+  * `:completed` — All final states reached.
+  * `:error` — (reserved) An unhandled error occurred.
   """
   @type execution_status :: :idle | :running | :completed | :error
 
   @spec execution_status(GenServer.server()) :: execution_status()
   def execution_status(pid) do
-    config = active_configuration(pid)
+    GenServer.call(pid, :execution_status)
+  end
 
-    cond do
-      done?(pid) -> :completed
-      MapSet.size(config) == 0 -> :error
-      true -> :running
-    end
+  @doc """
+  Return the status of each active state in the current configuration.
+
+  Returns a list of `%{id: String.t(), status: state_status(), type: state_type()}` maps.
+
+  Per-state statuses are tracked explicitly in the `state_statuses` map and
+  set on each state activation:
+
+  * `:running` — State is active and not a final state.
+  * `:completed` — State is active and is a final state (`<state type="final">`).
+
+  States not in the active configuration are omitted entirely — the caller only
+  sees what's currently rendered on the canvas.
+  """
+  @type state_status :: :running | :completed | :error
+  @type state_info :: %{id: String.t(), status: state_status(), type: ScxmlEngine.RuntimeState.state_type()}
+
+  @spec active_states(GenServer.server()) :: [state_info()]
+  def active_states(pid) do
+    GenServer.call(pid, :active_states)
   end
 
   @impl true
@@ -151,6 +174,8 @@ defmodule ScxmlEngine.Instance do
         graph_id: graph_id,
         active_configuration: MapSet.new(),
         datamodel: Map.put(initial_datamodel, "_event", nil),
+        execution_status: :idle,
+        state_statuses: %{},
         internal_queue: :queue.new(),
         history: %{}
       }
@@ -158,17 +183,24 @@ defmodule ScxmlEngine.Instance do
       # Enter the initial states top-down, running their on_entry actions.
       state = enter_initial_configuration(state, graph, initial_states)
 
+      # Run the initial macrostep to settle any eventless transitions.
+      # Status remains `:idle` until the first external event is processed.
       {:ok, run_macrostep(state)}
     end
   end
 
   @impl true
   def handle_call({:external_event, event}, _from, state) do
+    state = %{state | execution_status: :running}
+
     state =
       run_macrostep(%{
         state
         | internal_queue: :queue.in({:external, event}, state.internal_queue)
       })
+
+    graph = Compiler.fetch(state.graph_id)
+    state = set_execution_status(state, graph)
 
     {:reply, :ok, state}
   end
@@ -185,6 +217,29 @@ defmodule ScxmlEngine.Instance do
   @impl true
   def handle_call(:datamodel, _from, state) do
     {:reply, state.datamodel, state}
+  end
+
+  @impl true
+  def handle_call(:active_states, _from, state) do
+    graph = Compiler.fetch(state.graph_id)
+
+    states_info =
+      Enum.map(MapSet.to_list(state.active_configuration), fn state_id ->
+        state_node = Map.fetch!(graph.states, state_id)
+
+        %{
+          id: state_id,
+          status: Map.get(state.state_statuses, state_id, :running),
+          type: state_node.type
+        }
+      end)
+
+    {:reply, states_info, state}
+  end
+
+  @impl true
+  def handle_call(:execution_status, _from, state) do
+    {:reply, state.execution_status, state}
   end
 
   @doc false
@@ -361,7 +416,7 @@ defmodule ScxmlEngine.Instance do
 
         true ->
           state
-          |> activate(id)
+          |> activate(graph, id)
           |> execute_action_list(the_state.on_entry)
           |> enter_default_children(graph, id, remaining)
       end
@@ -402,7 +457,7 @@ defmodule ScxmlEngine.Instance do
 
   defp enter_if_default(state, graph, child, remaining) do
     state
-    |> activate(child)
+    |> activate(graph, child)
     |> execute_action_list(graph.states[child].on_entry)
     |> enter_default_children(graph, child, remaining)
   end
@@ -447,7 +502,7 @@ defmodule ScxmlEngine.Instance do
     Enum.reduce(Enum.reverse(targets), state, fn target, acc ->
       if Map.has_key?(graph.states, target) do
         acc
-        |> activate(target)
+        |> activate(graph, target)
         |> execute_entry_chain(graph, target)
       else
         acc
@@ -526,11 +581,11 @@ defmodule ScxmlEngine.Instance do
             acc
 
           %{type: :history} ->
-            activate(acc, id)
+            activate(acc, graph, id)
 
           _ ->
             acc
-            |> activate(id)
+            |> activate(graph, id)
             |> execute_action_list(the_state.on_entry)
         end
 
@@ -546,7 +601,7 @@ defmodule ScxmlEngine.Instance do
     case Map.fetch!(graph.states, id) do
       %{type: :compound, initial: child} when not is_nil(child) ->
         state
-        |> activate(child)
+        |> activate(graph, child)
         |> execute_action_list(graph.states[child].on_entry)
         |> execute_entry_chain(graph, child)
 
@@ -555,7 +610,7 @@ defmodule ScxmlEngine.Instance do
 
         Enum.reduce(children, state, fn child, acc ->
           acc
-          |> activate(child)
+          |> activate(graph, child)
           |> execute_action_list(graph.states[child].on_entry)
           |> execute_entry_chain(graph, child)
         end)
@@ -753,7 +808,48 @@ defmodule ScxmlEngine.Instance do
   defp put_loop_var(dm, item, value) when is_binary(item), do: Map.put(dm, item, value)
   defp put_loop_var(dm, _item, _value), do: dm
 
-  defp activate(state, id), do: %{state | active_configuration: MapSet.put(state.active_configuration, id)}
+  # Evaluate the final execution status after a macrostep settles.
+  # Uses the active configuration and per-state statuses to determine
+  # whether the instance is :running, :completed, or :error.
+  defp set_execution_status(state, _graph) do
+    if MapSet.size(state.active_configuration) == 0 do
+      %{state | execution_status: :completed}
+    else
+      has_final? =
+        Enum.any?(state.state_statuses, fn {_id, status} ->
+          status == :completed
+        end)
 
-  defp deactivate(state, id), do: %{state | active_configuration: MapSet.delete(state.active_configuration, id)}
+      if has_final? do
+        %{state | execution_status: :completed}
+      else
+        %{state | execution_status: :running}
+      end
+    end
+  end
+
+  defp activate(state, graph, id) do
+    the_state = Map.get(graph.states, id)
+
+    status =
+      cond do
+        is_nil(the_state) -> :running
+        the_state.type == :final -> :completed
+        true -> :running
+      end
+
+    %{
+      state
+      | active_configuration: MapSet.put(state.active_configuration, id),
+        state_statuses: Map.put(state.state_statuses, id, status)
+    }
+  end
+
+  defp deactivate(state, id) do
+    %{
+      state
+      | active_configuration: MapSet.delete(state.active_configuration, id),
+        state_statuses: Map.delete(state.state_statuses, id)
+    }
+  end
 end

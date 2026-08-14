@@ -1,4 +1,4 @@
-# Lefthook configuration — pre-commit quality pipeline.
+# Lefthook configuration — pre-commit quality pipeline + pre-push coverage.
 # Docs: https://github.com/evilmartians/lefthook
 #
 # Run `lefthook install` after editing this file to (re)write the git hooks.
@@ -15,6 +15,9 @@ pre-commit:
     test-suite:
       glob: "*.{ex,exs}"
       run: mix test --stale
-    coverage:
-      glob: "*.{ex,exs}"
-      run: mix test --cover
+
+pre-push:
+  parallel: true
+  commands:
+    coveralls:
+      run: mix coveralls

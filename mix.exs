@@ -8,7 +8,8 @@ defmodule ScxmlOrchestrator.MixProject do
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
-      test_coverage: [summary: [threshold: 100], ignore_modules: [ScxmlOrchestrator.Main]],
+      test_coverage: [tool: ExCoveralls, summary: [threshold: 100]],
+      preferred_cli_env: [coveralls: :test, "coveralls.detail": :test, "coveralls.html": :test],
       escript: [main_module: ScxmlOrchestrator.Main],
       deps: deps()
     ]
@@ -30,7 +31,8 @@ defmodule ScxmlOrchestrator.MixProject do
     [
       {:jason, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:styler, "~> 1.12", only: [:dev, :test], runtime: false}
+      {:styler, "~> 1.12", only: [:dev, :test], runtime: false},
+      {:excoveralls, "~> 0.18", only: :test}
     ]
   end
 end

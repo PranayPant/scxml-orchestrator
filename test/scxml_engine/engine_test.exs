@@ -66,4 +66,48 @@ defmodule ScxmlEngine.EngineTest do
       assert active == ["audio", "audio_idle", "both", "player", "video", "video_idle"]
     end
   end
+
+  describe "execution_status/1" do
+    test "starts as :idle before any external event" do
+      json = Fixtures.load_json("traffic_light")
+      {:ok, pid} = ScxmlEngine.run(json, instance_id: "exec_status_1")
+      assert ScxmlEngine.execution_status(pid) == :idle
+    end
+
+    test "becomes :running after receiving an external event" do
+      json = Fixtures.load_json("traffic_light")
+      {:ok, pid} = ScxmlEngine.run(json, instance_id: "exec_status_2")
+      ScxmlEngine.send_event(pid, "next")
+      assert ScxmlEngine.execution_status(pid) == :running
+    end
+  end
+
+  describe "active_states/1" do
+    test "returns a list of state_info maps with id, status, type" do
+      json = Fixtures.load_json("traffic_light")
+      {:ok, pid} = ScxmlEngine.run(json, instance_id: "active_states_1")
+
+      states = ScxmlEngine.active_states(pid)
+      assert is_list(states)
+      red = Enum.find(states, &(&1.id == "red"))
+      assert red.status == :running
+      assert red.type == :atomic
+    end
+
+    test "reflects state changes after sending events" do
+      json = Fixtures.load_json("traffic_light")
+      {:ok, pid} = ScxmlEngine.run(json, instance_id: "active_states_2")
+
+      ScxmlEngine.send_event(pid, "next")
+      states = ScxmlEngine.active_states(pid)
+      assert Enum.find(states, &(&1.id == "green"))
+      refute Enum.find(states, &(&1.id == "red"))
+    end
+
+    test "returns empty list when no active states" do
+      json = ~s({"scxml": {"id": "empty", "states": [], "parallels": [], "finals": []}})
+      {:ok, pid} = ScxmlEngine.run(json, instance_id: "active_states_empty")
+      assert ScxmlEngine.active_states(pid) == []
+    end
+  end
 end

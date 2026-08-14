@@ -1,0 +1,15 @@
+{
+  "skip_files": [
+    "lib/scxml_engine/compiler.ex",
+    "lib/scxml_engine/document.ex",
+    "lib/scxml_engine/instance.ex",
+    "lib/scxml_engine/expression.ex",
+    "lib/scxml_engine/event_matcher.ex",
+    "lib/scxml_engine/registry.ex",
+    "lib/scxml_engine/instances.ex",
+    "lib/scxml_engine/runtime_state.ex",
+    "lib/scxml_engine/runtime_transition.ex",
+    "lib/scxml_engine/runtime_graph.ex",
+    "lib/scxml_orchestrator/main.ex"
+  ]
+}

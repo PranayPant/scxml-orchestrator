@@ -20,5 +20,7 @@ defmodule ScxmlOrchestrator do
   defdelegate active_configuration(pid), to: ScxmlEngine
   defdelegate datamodel(pid), to: ScxmlEngine
   defdelegate done?(pid), to: ScxmlEngine
+  defdelegate execution_status(pid), to: ScxmlEngine
+  defdelegate active_states(pid), to: ScxmlEngine
   defdelegate instances(), to: ScxmlEngine
 end

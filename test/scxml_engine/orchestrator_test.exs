@@ -85,4 +85,42 @@ defmodule ScxmlEngine.OrchestratorTest do
       assert ScxmlEngine.active_configuration(pid2) == MapSet.new(["red"])
     end
   end
+
+  describe "execution_status/1 via ScxmlOrchestrator" do
+    test "starts as :idle before any external event" do
+      json = Fixtures.load_json("traffic_light")
+      {:ok, pid} = ScxmlOrchestrator.run(json, instance_id: "orch_exec_1")
+      assert ScxmlOrchestrator.execution_status(pid) == :idle
+    end
+
+    test "becomes :running after receiving an external event" do
+      json = Fixtures.load_json("traffic_light")
+      {:ok, pid} = ScxmlOrchestrator.run(json, instance_id: "orch_exec_2")
+      ScxmlOrchestrator.send_event(pid, "next")
+      assert ScxmlOrchestrator.execution_status(pid) == :running
+    end
+  end
+
+  describe "active_states/1 via ScxmlOrchestrator" do
+    test "returns state_info maps with id, status, type" do
+      json = Fixtures.load_json("traffic_light")
+      {:ok, pid} = ScxmlOrchestrator.run(json, instance_id: "orch_active_1")
+
+      states = ScxmlOrchestrator.active_states(pid)
+      assert is_list(states)
+      red = Enum.find(states, &(&1.id == "red"))
+      assert red.status == :running
+      assert red.type == :atomic
+    end
+
+    test "reflects state changes after events" do
+      json = Fixtures.load_json("traffic_light")
+      {:ok, pid} = ScxmlOrchestrator.run(json, instance_id: "orch_active_2")
+
+      ScxmlOrchestrator.send_event(pid, "next")
+      states = ScxmlOrchestrator.active_states(pid)
+      assert Enum.find(states, &(&1.id == "green"))
+      refute Enum.find(states, &(&1.id == "red"))
+    end
+  end
 end

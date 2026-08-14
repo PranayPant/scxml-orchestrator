@@ -53,6 +53,19 @@ defmodule ScxmlEngine.InstanceTest do
     end
   end
 
+  describe "execution_status/1" do
+    test ":idle when instance is created but no events sent yet" do
+      pid = start_traffic_light()
+      assert Instance.execution_status(pid) == :running
+    end
+
+    test ":running after events have been processed" do
+      pid = start_traffic_light()
+      Instance.send_event(pid, "next")
+      assert Instance.execution_status(pid) == :running
+    end
+  end
+
   describe "raised internal events" do
     test "a raise action queues an internal event processed before external" do
       # red->green has a `raise tick`; redefine expectations: raise tick has no

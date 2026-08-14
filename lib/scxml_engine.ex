@@ -140,6 +140,12 @@ defmodule ScxmlEngine do
   def done?(pid), do: Instance.done?(pid)
 
   @doc """
+  Execution status of an instance (`:idle | :running | :completed | :error`).
+  """
+  @spec execution_status(pid()) :: :idle | :running | :completed | :error
+  def execution_status(pid), do: Instance.execution_status(pid)
+
+  @doc """
   Enumerate all running instance `{instance_id, pid}` pairs.
   """
   @spec instances() :: [{String.t(), pid()}]

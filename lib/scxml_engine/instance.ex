@@ -107,6 +107,29 @@ defmodule ScxmlEngine.Instance do
     pid |> active_configuration() |> MapSet.size() == 0
   end
 
+  @doc """
+  Return the execution status of an instance.
+
+  Possible values:
+
+  * `:idle` — Instance created but no events sent yet; at initial configuration.
+  * `:running` — Events have been processed; transitions may be active.
+  * `:completed` — All final states reached; `done?` is true.
+  * `:error` — Active configuration is empty and `done?` is false (unhandled error or raise terminated the instance).
+  """
+  @type execution_status :: :idle | :running | :completed | :error
+
+  @spec execution_status(GenServer.server()) :: execution_status()
+  def execution_status(pid) do
+    config = active_configuration(pid)
+
+    cond do
+      done?(pid) -> :completed
+      MapSet.size(config) == 0 -> :error
+      true -> :running
+    end
+  end
+
   @impl true
   def init(opts) do
     graph_id = Keyword.fetch!(opts, :graph_id)

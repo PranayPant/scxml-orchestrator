@@ -17,23 +17,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup BEAM
-        uses: erlef/setup-beam@v1
-        with:
-          elixir-version: "1.20"
-          otp-version: "27"
-
-      - name: Install deps
-        run: mix deps.get
-
-      - name: Build escript
-        run: mix escript.build
-
+      # The tag created by this release is the "package" — consumers
+      # pin to it via `{:scxml_orchestrator, github: "PranayPant/scxml-orchestrator", tag: "v0.1.0"}`.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ github.event.inputs.version }}
-          files: scxml_orchestrator
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

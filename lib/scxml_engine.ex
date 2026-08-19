@@ -121,6 +121,22 @@ defmodule ScxmlEngine do
   def instance_pid(instance_id), do: Registry.lookup(instance_id)
 
   @doc """
+  Stop and remove an instance by `instance_id`.
+
+  Stops the instance process, which synchronously deregisters itself from the
+  registry before exiting. Once this returns `:ok`, `instance_pid/1` and
+  `instances/0` no longer see the instance. Returns `:error` when there was no
+  running instance with that id.
+  """
+  @spec remove_instance(String.t()) :: :ok | :error
+  def remove_instance(instance_id) do
+    case Registry.lookup(instance_id) do
+      {:ok, pid} -> Instance.stop(pid)
+      :error -> :error
+    end
+  end
+
+  @doc """
   Current active configuration (`MapSet` of state ids) of an instance.
   """
   @spec active_configuration(pid()) :: MapSet.t()

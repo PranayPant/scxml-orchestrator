@@ -44,6 +44,7 @@ defmodule ScxmlEngine.Instance do
 
   defstruct [
     :graph_id,
+    :instance_id,
     active_configuration: MapSet.new(),
     datamodel: %{},
     # Explicitly tracked instance-level execution status.
@@ -83,6 +84,16 @@ defmodule ScxmlEngine.Instance do
   @spec send_event(GenServer.server(), String.t(), term()) :: :ok
   def send_event(pid, event_name, payload \\ %{}) do
     GenServer.call(pid, {:external_event, %{name: event_name, data: payload}})
+  end
+
+  @doc """
+  Stop the instance, synchronously deregistering it from the registry first so
+  that, once this returns `:ok`, the instance is no longer discoverable by its
+  `instance_id`.
+  """
+  @spec stop(GenServer.server()) :: :ok
+  def stop(pid) do
+    GenServer.call(pid, :stop)
   end
 
   @doc """
@@ -174,6 +185,7 @@ defmodule ScxmlEngine.Instance do
 
       state = %Instance{
         graph_id: graph_id,
+        instance_id: instance_id,
         active_configuration: MapSet.new(),
         datamodel: Map.put(initial_datamodel, "_event", nil),
         execution_status: :idle,
@@ -205,6 +217,16 @@ defmodule ScxmlEngine.Instance do
     state = set_execution_status(state, graph)
 
     {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call(:stop, _from, state) do
+    # Unregister from within the instance process (the process that owns the
+    # registry entry) so deregistration is synchronous — `Registry.unregister/2`
+    # only removes entries owned by the calling process.
+    if is_binary(state.instance_id), do: Registry.unregister(state.instance_id)
+
+    {:stop, :normal, :ok, state}
   end
 
   # ---------------------------------------------------------------------------

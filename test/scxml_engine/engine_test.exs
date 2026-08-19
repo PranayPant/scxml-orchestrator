@@ -32,6 +32,22 @@ defmodule ScxmlEngine.EngineTest do
       assert {:ok, pid} = ScxmlEngine.instance_pid("traffic_route")
       assert ScxmlEngine.active_configuration(pid) == MapSet.new(["green"])
     end
+
+    test "remove_instance/1 stops and deregisters synchronously" do
+      json = Fixtures.load_json("traffic_light")
+      {:ok, _pid} = ScxmlEngine.run(json, instance_id: "traffic_remove")
+
+      assert {:ok, _pid} = ScxmlEngine.instance_pid("traffic_remove")
+      assert :ok = ScxmlEngine.remove_instance("traffic_remove")
+
+      # The instance is gone immediately — no registry-polling race.
+      assert ScxmlEngine.instance_pid("traffic_remove") == :error
+      refute Enum.any?(ScxmlEngine.instances(), fn {id, _} -> id == "traffic_remove" end)
+    end
+
+    test "remove_instance/1 returns :error for an unknown instance" do
+      assert ScxmlEngine.remove_instance("no_such_instance_xyz") == :error
+    end
   end
 
   describe "parallel regions (media_player)" do

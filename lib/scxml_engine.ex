@@ -39,6 +39,10 @@ defmodule ScxmlEngine do
     Document.load(json)
   end
 
+  # ---------------------------------------------------------------------------
+  # Instance lifecycle
+  # ---------------------------------------------------------------------------
+
   @doc """
   Compile (and optionally store) a graph. When `store` is `true` (default) the
   compiled graph is placed in `:persistent_term` under `graph_id` and the id is
@@ -46,10 +50,6 @@ defmodule ScxmlEngine do
 
   Returns `{:ok, graph_id}`.
   """
-
-  # ---------------------------------------------------------------------------
-  # Instance lifecycle
-  # ---------------------------------------------------------------------------
 
   @spec store(ScxmlEngine.RuntimeGraph.t(), String.t() | nil) :: {:ok, String.t()}
   def store(%ScxmlEngine.RuntimeGraph{} = graph, graph_id \\ nil) do
@@ -73,6 +73,9 @@ defmodule ScxmlEngine do
       {:ok, graph_id} = Compiler.store(graph, graph_id)
 
       instance_id = Keyword.get(opts, :instance_id, graph_id)
+      # ---------------------------------------------------------------------------
+      # Instance interaction
+      # ---------------------------------------------------------------------------
       initial_datamodel = Keyword.get(opts, :initial_datamodel, %{})
 
       Instances.start_instance(
@@ -82,10 +85,6 @@ defmodule ScxmlEngine do
       )
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # Instance interaction
-  # ---------------------------------------------------------------------------
 
   @doc """
   Start an instance for an already-stored graph.
@@ -153,7 +152,7 @@ defmodule ScxmlEngine do
   `state_type()` is `:normal`, `:parallel`, or `:final`. Only states in the
   active configuration are included.
   """
-  @spec active_states(pid()) :: [ScxmlEngine.Instance.state_info()]
+  @spec active_states(pid()) :: [Instance.state_info()]
   def active_states(pid), do: Instance.active_states(pid)
 
   @doc """

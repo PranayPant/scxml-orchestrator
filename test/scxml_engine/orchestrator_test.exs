@@ -119,8 +119,8 @@ defmodule ScxmlEngine.OrchestratorTest do
 
       ScxmlOrchestrator.send_event(pid, "next")
       states = ScxmlOrchestrator.active_states(pid)
-      assert Enum.find(states, &(&1.id == "green"))
-      refute Enum.find(states, &(&1.id == "red"))
+      assert Enum.any?(states, &(&1.id == "green"))
+      refute Enum.any?(states, &(&1.id == "red"))
     end
   end
 end

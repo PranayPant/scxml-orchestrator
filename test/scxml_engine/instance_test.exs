@@ -93,7 +93,7 @@ defmodule ScxmlEngine.InstanceTest do
       # After start, should be in active/a2 (compound state with children)
       states = Instance.active_states(pid)
 
-      assert length(states) >= 1
+      refute states == []
       # All non-final states should be :running
       assert Enum.all?(states, &(&1.status == :running))
     end

@@ -100,8 +100,8 @@ defmodule ScxmlEngine.EngineTest do
 
       ScxmlEngine.send_event(pid, "next")
       states = ScxmlEngine.active_states(pid)
-      assert Enum.find(states, &(&1.id == "green"))
-      refute Enum.find(states, &(&1.id == "red"))
+      assert Enum.any?(states, &(&1.id == "green"))
+      refute Enum.any?(states, &(&1.id == "red"))
     end
 
     test "returns empty list when no active states" do

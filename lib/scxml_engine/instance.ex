@@ -25,12 +25,14 @@ defmodule ScxmlEngine.Instance do
   """
 
   use GenServer
+  use OpenTelemetryDecorator
 
   alias ScxmlEngine.Compiler
   alias ScxmlEngine.EventMatcher
   alias ScxmlEngine.Expression
   alias ScxmlEngine.Instance
   alias ScxmlEngine.Registry
+  alias ScxmlEngine.SpanAttrs
 
   require Logger
 
@@ -269,17 +271,33 @@ defmodule ScxmlEngine.Instance do
   end
 
   # One event -> select and execute enabled transitions, then settle eventless.
+  @decorate with_span("macrostep.process_event")
   defp process_microstep(state, event) do
+    before_config = Enum.sort(MapSet.to_list(state.active_configuration))
+
     graph = Compiler.fetch(state.graph_id)
     enabled_transitions = select_transitions(graph, state, event)
 
-    if Enum.empty?(enabled_transitions) do
-      state
-    else
-      Enum.reduce(enabled_transitions, state, fn transition, acc_state ->
-        execute_transition(graph, acc_state, transition)
-      end)
-    end
+    result =
+      if Enum.empty?(enabled_transitions) do
+        state
+      else
+        Enum.reduce(enabled_transitions, state, fn transition, acc_state ->
+          execute_transition(graph, acc_state, transition)
+        end)
+      end
+
+    after_config = Enum.sort(MapSet.to_list(result.active_configuration))
+
+    O11y.set_attributes(
+      event: event.name,
+      config_before: SpanAttrs.config_to_string(before_config),
+      config_after: SpanAttrs.config_to_string(after_config),
+      execution_status: result.execution_status,
+      done: MapSet.size(result.active_configuration) == 0
+    )
+
+    result
   end
 
   # Select the first enabled transition (by event match + guard) for each
@@ -287,21 +305,29 @@ defmodule ScxmlEngine.Instance do
   # configuration are considered, matching SCXML's per-state priority where a
   # descendant transition beats its ancestor's (we process active states in
   # an order that gives descendants priority).
+  @decorate with_span("microstep.select_transitions")
   defp select_transitions(graph, state, event) do
     # Order active states so that deeper (more specific) states are handled
     # first, giving descendant transitions priority over ancestor transitions.
     active_states = Enum.sort_by(state.active_configuration, &(-length(Map.get(graph.ancestors_map, &1, []))))
 
-    active_states
-    |> Enum.flat_map(fn state_id ->
-      the_state = Map.fetch!(graph.states, state_id)
+    matched =
+      Enum.flat_map(active_states, fn state_id ->
+        the_state = Map.fetch!(graph.states, state_id)
 
-      case find_enabled_transition(the_state, event, state.datamodel) do
-        nil -> []
-        transition -> [{state_id, transition}]
-      end
-    end)
-    |> Enum.map(fn {_state_id, transition} -> transition end)
+        case find_enabled_transition(the_state, event, state.datamodel) do
+          nil -> []
+          transition -> [{state_id, transition}]
+        end
+      end)
+
+    O11y.set_attributes(
+      event: event.name,
+      active_config: SpanAttrs.config_to_string(Enum.sort(MapSet.to_list(state.active_configuration))),
+      enabled: Enum.map(matched, &SpanAttrs.enabled_transition_to_string/1)
+    )
+
+    Enum.map(matched, fn {_state_id, transition} -> transition end)
   end
 
   defp find_enabled_transition(the_state, event, datamodel) do
@@ -322,14 +348,29 @@ defmodule ScxmlEngine.Instance do
   #   2. Run the transition's executable actions.
   #   3. Enter states in `entry_set` top-down (run on_entry), adding to active config.
   #      Compound/parallel states are expanded recursively into their initial child.
+  @decorate with_span("execute_transition")
   defp execute_transition(graph, state, transition) do
     exit_set = compute_exit_set(graph, state, transition)
+    before_config = Enum.sort(MapSet.to_list(state.active_configuration))
 
-    state
-    |> record_exit_histories(graph, exit_set)
-    |> execute_exits(graph, exit_set)
-    |> execute_action_list(transition.actions)
-    |> execute_entries(graph, transition.entry_set)
+    result =
+      state
+      |> record_exit_histories(graph, exit_set)
+      |> execute_exits(graph, exit_set)
+      |> execute_action_list(transition.actions)
+      |> execute_entries(graph, transition.entry_set)
+
+    O11y.set_attributes(
+      event: transition.event,
+      targets: SpanAttrs.target_to_string(transition.targets),
+      lca: transition.lca_id,
+      exit: SpanAttrs.config_to_string(exit_set),
+      entry: SpanAttrs.config_to_string(transition.entry_set),
+      config_before: SpanAttrs.config_to_string(before_config),
+      config_after: SpanAttrs.config_to_string(Enum.sort(MapSet.to_list(result.active_configuration)))
+    )
+
+    result
   end
 
   # The states to exit for a transition are the currently-active states that

@@ -30,6 +30,11 @@ defmodule ScxmlOrchestrator.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
+      # Lightweight OTel API only — the host app (scxml-http-server) brings the
+      # SDK + exporter, so spans are no-ops here when no SDK is present.
+      {:opentelemetry_api, "~> 1.5"},
+      # @decorate with_span(...) auto-instrumentation for the interpreter.
+      {:open_telemetry_decorator, "~> 1.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:styler, "~> 1.12", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test}

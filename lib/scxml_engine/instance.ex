@@ -32,6 +32,7 @@ defmodule ScxmlEngine.Instance do
   alias ScxmlEngine.Expression
   alias ScxmlEngine.Instance
   alias ScxmlEngine.Registry
+  alias ScxmlEngine.SpanAttrs
 
   require Logger
 
@@ -290,8 +291,8 @@ defmodule ScxmlEngine.Instance do
 
     O11y.set_attributes(
       event: event.name,
-      config_before: config_to_string(before_config),
-      config_after: config_to_string(after_config),
+      config_before: SpanAttrs.config_to_string(before_config),
+      config_after: SpanAttrs.config_to_string(after_config),
       execution_status: result.execution_status,
       done: MapSet.size(result.active_configuration) == 0
     )
@@ -322,8 +323,8 @@ defmodule ScxmlEngine.Instance do
 
     O11y.set_attributes(
       event: event.name,
-      active_config: config_to_string(Enum.sort(MapSet.to_list(state.active_configuration))),
-      enabled: Enum.map(matched, &enabled_transition_to_string/1)
+      active_config: SpanAttrs.config_to_string(Enum.sort(MapSet.to_list(state.active_configuration))),
+      enabled: Enum.map(matched, &SpanAttrs.enabled_transition_to_string/1)
     )
 
     Enum.map(matched, fn {_state_id, transition} -> transition end)
@@ -340,23 +341,6 @@ defmodule ScxmlEngine.Instance do
 
   defp event_matches?(pattern, event_name) do
     EventMatcher.match?(pattern, event_name)
-  end
-
-  # Human-readable span-attribute formatting for OTel instrumentation.
-  # O11y stringifies non-primitive values with Kernel.inspect/1, so we render
-  # lists/structs as compact strings ourselves to keep the exported spans legible.
-
-  # "idle,running" for a sorted configuration / state-set list.
-  defp config_to_string(list) when is_list(list), do: Enum.join(list, ",")
-  defp config_to_string(other), do: inspect(other)
-
-  # "running,complete" for a transition's targets.
-  defp target_to_string(targets) when is_list(targets), do: Enum.join(targets, ",")
-  defp target_to_string(other), do: inspect(other)
-
-  # "processing ->done-> finished" for an enabled {from_state, transition} pair.
-  defp enabled_transition_to_string({from, %{event: event, targets: targets}}) do
-    "#{from} ->#{event}-> #{target_to_string(targets)}"
   end
 
   # Execute a single transition:
@@ -378,12 +362,12 @@ defmodule ScxmlEngine.Instance do
 
     O11y.set_attributes(
       event: transition.event,
-      targets: target_to_string(transition.targets),
+      targets: SpanAttrs.target_to_string(transition.targets),
       lca: transition.lca_id,
-      exit: config_to_string(exit_set),
-      entry: config_to_string(transition.entry_set),
-      config_before: config_to_string(before_config),
-      config_after: config_to_string(Enum.sort(MapSet.to_list(result.active_configuration)))
+      exit: SpanAttrs.config_to_string(exit_set),
+      entry: SpanAttrs.config_to_string(transition.entry_set),
+      config_before: SpanAttrs.config_to_string(before_config),
+      config_after: SpanAttrs.config_to_string(Enum.sort(MapSet.to_list(result.active_configuration)))
     )
 
     result

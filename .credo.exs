@@ -148,7 +148,11 @@
           {Credo.Check.Warning.ExpensiveEmptyEnumCheck, []},
           {Credo.Check.Warning.IExPry, []},
           {Credo.Check.Warning.IoInspect, []},
-          {Credo.Check.Warning.MissedMetadataKeyInLoggerConfig, []},
+          # The orchestrator is a library consumed by host apps that own the
+          # :logger config; we use structured metadata keys in debug tracing
+          # without a host-provided allowlist. This mirrors scxml-http-server,
+          # which disables the same check for the same reason.
+          {Credo.Check.Warning.MissedMetadataKeyInLoggerConfig, false},
           {Credo.Check.Warning.OperationOnSameValues, []},
           {Credo.Check.Warning.OperationWithConstantResult, []},
           {Credo.Check.Warning.RaiseInsideRescue, []},

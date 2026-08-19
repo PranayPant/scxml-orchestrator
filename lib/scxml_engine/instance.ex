@@ -253,6 +253,13 @@ defmodule ScxmlEngine.Instance do
           |> put_datamodel("_event", event)
           |> process_microstep(event)
 
+        Logger.debug("macrostep: event settled",
+          event: event.name,
+          config: Enum.sort(MapSet.to_list(state_after_event.active_configuration)),
+          execution_status: state_after_event.execution_status,
+          done: MapSet.size(state_after_event.active_configuration) == 0
+        )
+
         run_macrostep(state_after_event)
 
       :empty ->
@@ -292,16 +299,33 @@ defmodule ScxmlEngine.Instance do
     # first, giving descendant transitions priority over ancestor transitions.
     active_states = Enum.sort_by(state.active_configuration, &(-length(Map.get(graph.ancestors_map, &1, []))))
 
-    active_states
-    |> Enum.flat_map(fn state_id ->
-      the_state = Map.fetch!(graph.states, state_id)
+    matched =
+      Enum.flat_map(active_states, fn state_id ->
+        the_state = Map.fetch!(graph.states, state_id)
 
-      case find_enabled_transition(the_state, event, state.datamodel) do
-        nil -> []
-        transition -> [{state_id, transition}]
-      end
-    end)
-    |> Enum.map(fn {_state_id, transition} -> transition end)
+        case find_enabled_transition(the_state, event, state.datamodel) do
+          nil -> []
+          transition -> [{state_id, transition}]
+        end
+      end)
+
+    Logger.debug("microstep: enabled transitions",
+      event: event.name,
+      active_config: Enum.sort(MapSet.to_list(state.active_configuration)),
+      enabled:
+        Enum.map(matched, fn {state_id, t} ->
+          %{
+            from: state_id,
+            event: t.event,
+            targets: t.targets,
+            lca: t.lca_id,
+            static_exit_set: t.exit_set,
+            static_entry_set: t.entry_set
+          }
+        end)
+    )
+
+    Enum.map(matched, fn {_state_id, transition} -> transition end)
   end
 
   defp find_enabled_transition(the_state, event, datamodel) do
@@ -324,12 +348,32 @@ defmodule ScxmlEngine.Instance do
   #      Compound/parallel states are expanded recursively into their initial child.
   defp execute_transition(graph, state, transition) do
     exit_set = compute_exit_set(graph, state, transition)
+    before_config = Enum.sort(MapSet.to_list(state.active_configuration))
 
-    state
-    |> record_exit_histories(graph, exit_set)
-    |> execute_exits(graph, exit_set)
-    |> execute_action_list(transition.actions)
-    |> execute_entries(graph, transition.entry_set)
+    Logger.debug("execute_transition: before",
+      event: transition.event,
+      targets: transition.targets,
+      lca: transition.lca_id,
+      active_config: before_config,
+      runtime_exit_set: exit_set,
+      entry_set: transition.entry_set
+    )
+
+    result =
+      state
+      |> record_exit_histories(graph, exit_set)
+      |> execute_exits(graph, exit_set)
+      |> execute_action_list(transition.actions)
+      |> execute_entries(graph, transition.entry_set)
+
+    Logger.debug("execute_transition: after",
+      event: transition.event,
+      targets: transition.targets,
+      active_config_before: before_config,
+      active_config_after: Enum.sort(MapSet.to_list(result.active_configuration))
+    )
+
+    result
   end
 
   # The states to exit for a transition are the currently-active states that

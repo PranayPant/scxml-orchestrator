@@ -1,0 +1,57 @@
+name: CI
+
+# Runs lint, formatting, and coverage checks on the PR flow (and on pushes to
+# main) so that the same quality gates enforced locally by lefthook (pre-commit
+# `mix format --check-formatted` + `mix credo --strict`) and the pre-push
+# `mix coveralls` (100% threshold) run in CI before a pull request merges.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: lint / format / coverage (100%)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: "1.20.3"
+            otp: "28.5.0.5"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - name: Restore deps + build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Format check
+        run: mix format --check-formatted
+
+      - name: Lint (credo strict)
+        run: mix credo --strict
+
+      - name: Coverage (ExCoveralls, 100% threshold from mix.exs)
+        run: mix coveralls

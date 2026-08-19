@@ -25,6 +25,7 @@ defmodule ScxmlEngine.Instance do
   """
 
   use GenServer
+  use OpenTelemetryDecorator
 
   alias ScxmlEngine.Compiler
   alias ScxmlEngine.EventMatcher
@@ -253,13 +254,6 @@ defmodule ScxmlEngine.Instance do
           |> put_datamodel("_event", event)
           |> process_microstep(event)
 
-        Logger.debug("macrostep: event settled",
-          event: event.name,
-          config: Enum.sort(MapSet.to_list(state_after_event.active_configuration)),
-          execution_status: state_after_event.execution_status,
-          done: MapSet.size(state_after_event.active_configuration) == 0
-        )
-
         run_macrostep(state_after_event)
 
       :empty ->
@@ -276,17 +270,33 @@ defmodule ScxmlEngine.Instance do
   end
 
   # One event -> select and execute enabled transitions, then settle eventless.
+  @decorate with_span("macrostep.process_event")
   defp process_microstep(state, event) do
+    before_config = Enum.sort(MapSet.to_list(state.active_configuration))
+
     graph = Compiler.fetch(state.graph_id)
     enabled_transitions = select_transitions(graph, state, event)
 
-    if Enum.empty?(enabled_transitions) do
-      state
-    else
-      Enum.reduce(enabled_transitions, state, fn transition, acc_state ->
-        execute_transition(graph, acc_state, transition)
-      end)
-    end
+    result =
+      if Enum.empty?(enabled_transitions) do
+        state
+      else
+        Enum.reduce(enabled_transitions, state, fn transition, acc_state ->
+          execute_transition(graph, acc_state, transition)
+        end)
+      end
+
+    after_config = Enum.sort(MapSet.to_list(result.active_configuration))
+
+    O11y.set_attributes(
+      event: event.name,
+      config_before: config_to_string(before_config),
+      config_after: config_to_string(after_config),
+      execution_status: result.execution_status,
+      done: MapSet.size(result.active_configuration) == 0
+    )
+
+    result
   end
 
   # Select the first enabled transition (by event match + guard) for each
@@ -294,6 +304,7 @@ defmodule ScxmlEngine.Instance do
   # configuration are considered, matching SCXML's per-state priority where a
   # descendant transition beats its ancestor's (we process active states in
   # an order that gives descendants priority).
+  @decorate with_span("microstep.select_transitions")
   defp select_transitions(graph, state, event) do
     # Order active states so that deeper (more specific) states are handled
     # first, giving descendant transitions priority over ancestor transitions.
@@ -309,20 +320,10 @@ defmodule ScxmlEngine.Instance do
         end
       end)
 
-    Logger.debug("microstep: enabled transitions",
+    O11y.set_attributes(
       event: event.name,
-      active_config: Enum.sort(MapSet.to_list(state.active_configuration)),
-      enabled:
-        Enum.map(matched, fn {state_id, t} ->
-          %{
-            from: state_id,
-            event: t.event,
-            targets: t.targets,
-            lca: t.lca_id,
-            static_exit_set: t.exit_set,
-            static_entry_set: t.entry_set
-          }
-        end)
+      active_config: config_to_string(Enum.sort(MapSet.to_list(state.active_configuration))),
+      enabled: Enum.map(matched, &enabled_transition_to_string/1)
     )
 
     Enum.map(matched, fn {_state_id, transition} -> transition end)
@@ -341,23 +342,32 @@ defmodule ScxmlEngine.Instance do
     EventMatcher.match?(pattern, event_name)
   end
 
+  # Human-readable span-attribute formatting for OTel instrumentation.
+  # O11y stringifies non-primitive values with Kernel.inspect/1, so we render
+  # lists/structs as compact strings ourselves to keep the exported spans legible.
+
+  # "idle,running" for a sorted configuration / state-set list.
+  defp config_to_string(list) when is_list(list), do: Enum.join(list, ",")
+  defp config_to_string(other), do: inspect(other)
+
+  # "running,complete" for a transition's targets.
+  defp target_to_string(targets) when is_list(targets), do: Enum.join(targets, ",")
+  defp target_to_string(other), do: inspect(other)
+
+  # "processing ->done-> finished" for an enabled {from_state, transition} pair.
+  defp enabled_transition_to_string({from, %{event: event, targets: targets}}) do
+    "#{from} ->#{event}-> #{target_to_string(targets)}"
+  end
+
   # Execute a single transition:
   #   1. Exit states in `exit_set` bottom-up (run on_exit), removing from active config.
   #   2. Run the transition's executable actions.
   #   3. Enter states in `entry_set` top-down (run on_entry), adding to active config.
   #      Compound/parallel states are expanded recursively into their initial child.
+  @decorate with_span("execute_transition")
   defp execute_transition(graph, state, transition) do
     exit_set = compute_exit_set(graph, state, transition)
     before_config = Enum.sort(MapSet.to_list(state.active_configuration))
-
-    Logger.debug("execute_transition: before",
-      event: transition.event,
-      targets: transition.targets,
-      lca: transition.lca_id,
-      active_config: before_config,
-      runtime_exit_set: exit_set,
-      entry_set: transition.entry_set
-    )
 
     result =
       state
@@ -366,11 +376,14 @@ defmodule ScxmlEngine.Instance do
       |> execute_action_list(transition.actions)
       |> execute_entries(graph, transition.entry_set)
 
-    Logger.debug("execute_transition: after",
+    O11y.set_attributes(
       event: transition.event,
-      targets: transition.targets,
-      active_config_before: before_config,
-      active_config_after: Enum.sort(MapSet.to_list(result.active_configuration))
+      targets: target_to_string(transition.targets),
+      lca: transition.lca_id,
+      exit: config_to_string(exit_set),
+      entry: config_to_string(transition.entry_set),
+      config_before: config_to_string(before_config),
+      config_after: config_to_string(Enum.sort(MapSet.to_list(result.active_configuration)))
     )
 
     result

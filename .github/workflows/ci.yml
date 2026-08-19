@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   quality:
-    name: format, lint, and 100% coverage (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    name: Quality Checks
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

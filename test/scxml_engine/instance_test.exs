@@ -286,10 +286,6 @@ defmodule ScxmlEngine.InstanceTest do
       Instance.send_event(pid, "back")
       assert active(pid) == ["a", "a1", "b", "b1", "outer", "p"]
     end
-
-    defp active(pid) do
-      pid |> Instance.active_configuration() |> MapSet.to_list() |> Enum.sort()
-    end
   end
 
   describe "entering a parallel state directly" do

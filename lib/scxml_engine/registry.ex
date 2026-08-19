@@ -56,6 +56,20 @@ defmodule ScxmlEngine.Registry do
   end
 
   @doc """
+  Synchronously remove the entry for `instance_id` owned by the calling process.
+
+  This mirrors `Registry.unregister/2`, which only removes entries registered by
+  the **current process**. It must therefore be called from the process that
+  registered the entry (e.g. the instance process deregistering itself on stop)
+  — it is a no-op when called from a different process. Returns `:ok` even when
+  there is no such entry.
+  """
+  @spec unregister(String.t()) :: :ok
+  def unregister(instance_id) do
+    Registry.unregister(@registry_name, instance_id)
+  end
+
+  @doc """
   Return all `{instance_id, pid}` pairs currently registered.
   """
   @spec instances() :: [{String.t(), pid()}]

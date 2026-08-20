@@ -33,6 +33,7 @@ defmodule ScxmlEngine.Instance do
   alias ScxmlEngine.Instance
   alias ScxmlEngine.Registry
   alias ScxmlEngine.SpanAttrs
+  alias ScxmlEngine.SpanDetail
 
   require Logger
 
@@ -71,7 +72,13 @@ defmodule ScxmlEngine.Instance do
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     {gen_opts, init_opts} = Keyword.split(opts, [:name])
-    GenServer.start_link(__MODULE__, init_opts, gen_opts)
+
+    # Carry the caller's OTel span context into the instance process so the
+    # initial macrostep's interpreter spans join the caller's trace (e.g. the
+    # HTTP `createStatechart` span from scxml-http-server).
+    otel_ctx = OpenTelemetry.Tracer.current_span_ctx()
+
+    GenServer.start_link(__MODULE__, Keyword.put(init_opts, :otel_ctx, otel_ctx), gen_opts)
   end
 
   @doc """
@@ -83,7 +90,11 @@ defmodule ScxmlEngine.Instance do
   """
   @spec send_event(GenServer.server(), String.t(), term()) :: :ok
   def send_event(pid, event_name, payload \\ %{}) do
-    GenServer.call(pid, {:external_event, %{name: event_name, data: payload}})
+    # Capture the caller's OTel span context and hand it to the instance
+    # process so the interpreter spans become children of the caller's span —
+    # one cohesive trace across the GenServer boundary.
+    otel_ctx = OpenTelemetry.Tracer.current_span_ctx()
+    GenServer.call(pid, {:external_event, %{name: event_name, data: payload}, otel_ctx})
   end
 
   @doc """
@@ -168,6 +179,10 @@ defmodule ScxmlEngine.Instance do
 
   @impl true
   def init(opts) do
+    # Restore the caller's span context (see start_link/1) so the initial
+    # macrostep's interpreter spans join the caller's trace.
+    OpenTelemetry.Tracer.set_current_span(Keyword.get(opts, :otel_ctx, :undefined))
+
     graph_id = Keyword.fetch!(opts, :graph_id)
     instance_id = Keyword.get(opts, :instance_id)
     initial_datamodel = Keyword.get(opts, :initial_datamodel, %{})
@@ -204,7 +219,11 @@ defmodule ScxmlEngine.Instance do
   end
 
   @impl true
-  def handle_call({:external_event, event}, _from, state) do
+  def handle_call({:external_event, event, otel_ctx}, _from, state) do
+    # Restore the caller's span context (see send_event/3) so the interpreter
+    # spans for this event join the caller's trace.
+    OpenTelemetry.Tracer.set_current_span(otel_ctx)
+
     state = %{state | execution_status: :running}
 
     state =
@@ -327,8 +346,15 @@ defmodule ScxmlEngine.Instance do
   # configuration are considered, matching SCXML's per-state priority where a
   # descendant transition beats its ancestor's (we process active states in
   # an order that gives descendants priority).
-  @decorate with_span("microstep.select_transitions")
+  # DEBUG detail: selection is wrapped in its own span; at INFO the interpreter
+  # emits only the coarse `macrostep.process_event` span.
   defp select_transitions(graph, state, event) do
+    SpanDetail.with_debug_span("microstep.select_transitions", fn ->
+      do_select_transitions(graph, state, event)
+    end)
+  end
+
+  defp do_select_transitions(graph, state, event) do
     # Order active states so that deeper (more specific) states are handled
     # first, giving descendant transitions priority over ancestor transitions.
     active_states = Enum.sort_by(state.active_configuration, &(-length(Map.get(graph.ancestors_map, &1, []))))
@@ -355,7 +381,11 @@ defmodule ScxmlEngine.Instance do
   defp find_enabled_transition(the_state, event, datamodel) do
     Enum.find(the_state.transitions, fn t ->
       event_matches?(t.event, event.name) and
-        Expression.guard_true?(t.cond, datamodel)
+        SpanDetail.with_debug_span("expression.evaluate", fn ->
+          result = Expression.guard_true?(t.cond, datamodel)
+          O11y.set_attributes(event: event.name, cond: t.cond, result: result)
+          result
+        end)
     end)
   end
 
@@ -370,8 +400,15 @@ defmodule ScxmlEngine.Instance do
   #   2. Run the transition's executable actions.
   #   3. Enter states in `entry_set` top-down (run on_entry), adding to active config.
   #      Compound/parallel states are expanded recursively into their initial child.
-  @decorate with_span("execute_transition")
+  # DEBUG detail: transition execution is wrapped in its own span; at INFO the
+  # interpreter emits only the coarse `macrostep.process_event` span.
   defp execute_transition(graph, state, transition) do
+    SpanDetail.with_debug_span("execute_transition", fn ->
+      do_execute_transition(graph, state, transition)
+    end)
+  end
+
+  defp do_execute_transition(graph, state, transition) do
     exit_set = compute_exit_set(graph, state, transition)
     before_config = Enum.sort(MapSet.to_list(state.active_configuration))
 
@@ -696,7 +733,10 @@ defmodule ScxmlEngine.Instance do
   # Recognized `kind`s: raise, assign, log, if/elseif/else, foreach, send,
   # cancel, script. Unsupported kinds are ignored.
   defp execute_action_list(state, actions) do
-    Enum.reduce(actions, state, fn action, acc -> execute_action(action, acc) end)
+    SpanDetail.with_debug_span("action.execute", fn ->
+      O11y.set_attributes(count: length(actions))
+      Enum.reduce(actions, state, fn action, acc -> execute_action(action, acc) end)
+    end)
   end
 
   defp execute_action(%{"kind" => "raise", "event" => event}, state) do
